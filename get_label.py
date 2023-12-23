@@ -47,7 +47,7 @@ if __name__ == '__main__':
 
     nlp1 = spacy.load('en_core_web_lg')
     nlp2 = spacy.load('en_core_web_md')
-    fin = open(opt.source_file, 'r')
+    fin = open(opt.source_file, 'r', encoding='utf-8', newline='\n', errors='ignore')
     lines = fin.readlines()
     fin.close()
     fin = open(opt.target_path, 'w', encoding='utf-8', newline='\n', errors='ignore')
