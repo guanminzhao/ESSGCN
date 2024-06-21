@@ -1,19 +1,16 @@
 import torch
 from transformers import BertTokenizer, BertModel
 import pickle
-import copy
 from tqdm import tqdm
 import argparse
 
-def process(bert, tokenizer, lines, f):
+def process(bert, tokenizer, lines, f, opt):
     dict = {}
     for i in tqdm(range(0, len(lines), 3)):
         text_left, _, text_right = [s.lower().strip() for s in lines[i].partition("$T$")]
         aspect = lines[i + 1].lower().strip()
-        polarity = lines[i + 2].strip()
 
         if len(aspect.split()) > 1:
-            graph_list = []
             small_dict = {}
             for x in aspect.split():
                 mask_aspect_text = text_left + ' ' + aspect.replace(x, '[MASK]') + ' ' + text_right
@@ -28,13 +25,14 @@ def process(bert, tokenizer, lines, f):
                         output1 = bert(input1['input_ids'])
                         output2 = bert(input2['input_ids'])
                         dist.append(torch.cdist(output1[1], output2[1], p=2))
-                try:
-                    a = torch.topk(torch.Tensor(dist), 3)
-                except:
-                    print(1)
                 graph = torch.zeros_like(torch.Tensor(dist))
-                for y in a[1]:
-                    graph[y] = 1
+                if (len(dist) >= opt.k):
+                    a = torch.topk(torch.Tensor(dist), opt.k)
+                    for y in a[1]:
+                        graph[y] = 1
+                else:
+                    graph = torch.ones_like(torch.Tensor(dist))
+
                 if not bool(small_dict):
                     small_dict['graph'] = graph
                     mask_index = torch.zeros_like(torch.Tensor(dist))
@@ -51,7 +49,6 @@ def process(bert, tokenizer, lines, f):
         else:
             small_dict = {}
             mask_aspect_text = text_left + ' ' + '[MASK]' + ' ' + text_right
-            graph_list = []
             dist = []
             with torch.no_grad():
                 for j in range(len(mask_aspect_text.split())):
@@ -63,8 +60,8 @@ def process(bert, tokenizer, lines, f):
                     output1 = bert(input1['input_ids'])
                     output2 = bert(input2['input_ids'])
                     dist.append(torch.cdist(output1[1], output2[1], p=2))
-            if(len(dist) >= 3):
-                a = torch.topk(torch.Tensor(dist), 3)
+            if(len(dist) >= opt.k):
+                a = torch.topk(torch.Tensor(dist), opt.k)
                 graph = torch.zeros_like(torch.Tensor(dist))
                 for y in a[1]:
                     graph[y] = 1
@@ -90,8 +87,9 @@ def process(bert, tokenizer, lines, f):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--device', default=None, type=str, help='e.g. cuda:0')
-    parser.add_argument('--source_file', type=str)
-    parser.add_argument('--target_path', type=str)
+    parser.add_argument('--k', default=3, type=int)
+    parser.add_argument('--source_file', type=str, default='./datasets/semeval14/Restaurants_Train.xml.seg')
+    parser.add_argument('--target_path', type=str, default='./datasets/semeval14/Restaurants_Train.xml.seg.newgraph')
     opt = parser.parse_args()
     opt.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu') \
         if opt.device is None else torch.device(opt.device)
@@ -104,6 +102,6 @@ if __name__ == '__main__':
     fin.close()
 
     fin = open(opt.target_path, 'wb')
-    process(bert, tokenizer, lines, fin)
+    process(bert, tokenizer, lines, fin, opt)
     fin.close()
 
